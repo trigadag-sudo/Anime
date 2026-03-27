@@ -52,3 +52,15 @@ VERCEL_TOKEN=*** vercel --prod --token "$VERCEL_TOKEN"
 ```
 
 > Security: never publish long-lived Vercel tokens in chat/messages. Revoke leaked tokens immediately.
+
+
+## Vercel fix: "No Output Directory named public"
+
+If Vercel shows this error, your project is configured as a static app.
+This repository now includes `vercel.json` with `framework: "nextjs"` and `outputDirectory: ".next"`.
+
+In Vercel Dashboard (can be done from phone):
+1. Project → **Settings** → **General**.
+2. Set **Framework Preset** to **Next.js**.
+3. Clear custom **Output Directory** (or set `.next`).
+4. Save and click **Redeploy** from latest commit.
