@@ -16,8 +16,25 @@ export default async function WatchPage({ params }: WatchPageProps) {
     notFound();
   }
 
+  const videoSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'VideoObject',
+    name: anime.title,
+    description: anime.subtitle || anime.title,
+    thumbnailUrl: [anime.posterUrl],
+    embedUrl: `https://ashdi.vip/embed/${anime.id}`,
+    genre: 'Anime',
+    inLanguage: 'uk',
+    potentialAction: {
+      '@type': 'WatchAction',
+      target: `https://animehub-ua.vercel.app/watch/${anime.id}`,
+    },
+  };
+
   return (
     <section className="space-y-4">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(videoSchema) }} />
+
       <Link
         href="/"
         className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-200 transition hover:border-orange-500 hover:text-orange-400"
@@ -32,7 +49,7 @@ export default async function WatchPage({ params }: WatchPageProps) {
 
       <AnimePlayer shikimoriId={anime.id} title={anime.title} />
 
-      <p className="text-xs text-zinc-500">Плеєр автоматично пробує резервні джерела, якщо перше не відповідає.</p>
+      <p className="text-xs text-zinc-500">Плеєр автоматично переключає джерело через 7 секунд, якщо поточне не відповідає.</p>
     </section>
   );
 }
