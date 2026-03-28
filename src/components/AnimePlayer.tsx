@@ -14,28 +14,16 @@ interface Provider {
 
 const DEFAULT_PROVIDERS: Provider[] = [
   {
-    label: 'Ashdi UA (авто)',
+    label: 'UA #1',
     url: 'https://ashdi.vip/embed/{id}?voice=uk&lang=uk&translation=uk',
   },
   {
-    label: 'Ashdi Default',
-    url: 'https://ashdi.vip/embed/{id}',
-  },
-  {
-    label: 'Ashdi Mirror',
+    label: 'UA #2',
     url: 'https://ashdi.me/embed/{id}?voice=uk&lang=uk',
   },
-];
-
-const EXTERNAL_SOURCES = [
   {
-    label: 'YouTube (пошук UA)',
-    href: (title: string) =>
-      `https://www.youtube.com/results?search_query=${encodeURIComponent(`${title} українською`)}`,
-  },
-  {
-    label: 'Shikimori сторінка',
-    href: (_title: string, id: number) => `https://shikimori.one/animes/${id}`,
+    label: 'Default',
+    url: 'https://ashdi.vip/embed/{id}',
   },
 ];
 
@@ -50,11 +38,9 @@ const parseProviderEnv = (raw: string | undefined): Provider[] => {
     .filter(Boolean)
     .map((item) => {
       const [label, url] = item.split('|').map((part) => part?.trim());
-
       if (!label || !url || !url.includes('{id}')) {
         return null;
       }
-
       return { label, url };
     })
     .filter((item): item is Provider => Boolean(item));
@@ -100,7 +86,7 @@ export default function AnimePlayer({ shikimoriId, title }: AnimePlayerProps) {
         {isLoading && (
           <div className="absolute inset-0 z-10 animate-pulse bg-zinc-800/80">
             <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-400">
-              Завантаження плеєра з українською озвучкою...
+              Завантаження плеєра...
             </div>
           </div>
         )}
@@ -118,27 +104,9 @@ export default function AnimePlayer({ shikimoriId, title }: AnimePlayerProps) {
         />
       </div>
 
-      <div className="space-y-2">
-        <p className="text-xs text-zinc-400">
-          Підтримуються декілька джерел. За потреби ти можеш передати власні провайдери через{' '}
-          <code>NEXT_PUBLIC_EMBED_PROVIDERS</code> у форматі{' '}
-          <code>Назва|https://site/embed/{"{id}"}</code>.
-        </p>
-
-        <div className="flex flex-wrap gap-2">
-          {EXTERNAL_SOURCES.map((source) => (
-            <a
-              key={source.label}
-              href={source.href(title, shikimoriId)}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-orange-500 hover:text-orange-400"
-            >
-              {source.label}
-            </a>
-          ))}
-        </div>
-      </div>
+      <p className="text-xs text-zinc-400">
+        Якщо відео не запускається, перемкни джерело кнопками вище.
+      </p>
     </div>
   );
 }
