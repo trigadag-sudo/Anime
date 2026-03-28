@@ -120,8 +120,9 @@ export default function AnimePlayer({ shikimoriId, title }: AnimePlayerProps) {
 
       <div className="space-y-2">
         <p className="text-xs text-zinc-400">
-          Підтримуються декілька джерел. За потреби ти можеш передати власні провайдери через
-          `NEXT_PUBLIC_EMBED_PROVIDERS` у форматі `Назва|https://site/embed/{id}`.
+          Підтримуються декілька джерел. За потреби ти можеш передати власні провайдери через{' '}
+          <code>NEXT_PUBLIC_EMBED_PROVIDERS</code> у форматі{' '}
+          <code>Назва|https://site/embed/{"{id}"}</code>.
         </p>
 
         <div className="flex flex-wrap gap-2">
