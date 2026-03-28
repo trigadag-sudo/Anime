@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface AnimePlayerProps {
@@ -7,140 +8,177 @@ interface AnimePlayerProps {
   title: string;
 }
 
-interface Provider {
+interface ProviderSource {
   label: string;
-  url: string;
+  embedTemplate: string;
+  torrentTemplate?: string;
 }
 
-const PROVIDER_TEMPLATES: Provider[] = [
-  { label: 'Ashdi UA', url: 'https://ashdi.vip/embed/{id}?voice=uk&lang=uk&translation=uk' },
-  { label: 'Ashdi Mirror UA', url: 'https://ashdi.me/embed/{id}?voice=uk&lang=uk&translation=uk' },
-  { label: 'UFDub UA', url: 'https://ufdub.com/embed/{id}?lang=uk' },
-  { label: 'Hikka UA', url: 'https://hikka.io/embed/{id}?language=uk' },
-  { label: 'Fallback', url: 'https://ashdi.vip/embed/{id}' },
+interface ParsedProvider {
+  label: string;
+  embedUrl: string;
+  torrentUrl: string | null;
+}
+
+const PROVIDERS: ProviderSource[] = [
+  {
+    label: 'UA #1',
+    embedTemplate: 'https://ashdi.vip/embed/{id}?voice=uk&lang=uk&translation=uk',
+    torrentTemplate: 'https://nyaa.si/?f=0&c=1_2&q={query}',
+  },
+  {
+    label: 'UA #2',
+    embedTemplate: 'https://ashdi.me/embed/{id}?voice=uk&lang=uk&translation=uk',
+    torrentTemplate: 'https://toloka.to/tracker.php?nm={query}',
+  },
+  {
+    label: 'Fallback',
+    embedTemplate: 'https://ashdi.vip/embed/{id}',
+    torrentTemplate: 'https://nyaa.si/?f=0&c=1_0&q={query}',
+  },
 ];
 
 const LOAD_TIMEOUT_MS = 7000;
+const EMBED_ALLOWED_QUERY = new Set(['voice', 'lang', 'translation', 'language', 'id']);
 
-function parseUkrainianDubProviders(shikimoriId: number): Provider[] {
-  const normalized = PROVIDER_TEMPLATES.map((provider) => ({
-    label: provider.label,
-    url: provider.url.replace('{id}', String(shikimoriId)),
-  }));
+function sanitizeEmbedUrl(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+
+    // Strip trackers/ads params from embed URL.
+    const keysToValidate: string[] = [];
+    parsed.searchParams.forEach((_, key) => {
+      keysToValidate.push(key);
+    });
+
+    keysToValidate.forEach((key) => {
+      if (!EMBED_ALLOWED_QUERY.has(key)) {
+        parsed.searchParams.delete(key);
+      }
+    });
+
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+function extractTorrentLink(provider: ProviderSource, shikimoriId: number, title: string): string | null {
+  if (!provider.torrentTemplate) return null;
+
+  return provider.torrentTemplate
+    .replace('{id}', String(shikimoriId))
+    .replace('{query}', encodeURIComponent(`${title} ukr dub`));
+}
+
+function parseProviderSources(shikimoriId: number, title: string): ParsedProvider[] {
+  const parsed = PROVIDERS.map((provider) => {
+    const embedUrl = sanitizeEmbedUrl(provider.embedTemplate.replace('{id}', String(shikimoriId)));
+    const torrentUrl = extractTorrentLink(provider, shikimoriId, title);
+
+    return {
+      label: provider.label,
+      embedUrl,
+      torrentUrl,
+    };
+  });
 
   const seen = new Set<string>();
-  return normalized.filter((provider) => {
-    if (seen.has(provider.url)) return false;
-    seen.add(provider.url);
+  return parsed.filter((item) => {
+    if (seen.has(item.embedUrl)) return false;
+    seen.add(item.embedUrl);
     return true;
   });
 }
 
 export default function AnimePlayer({ shikimoriId, title }: AnimePlayerProps) {
-  const providerPool = useMemo(() => parseUkrainianDubProviders(shikimoriId), [shikimoriId]);
+  const providers = useMemo(() => parseProviderSources(shikimoriId, title), [shikimoriId, title]);
 
   const [mounted, setMounted] = useState(false);
-  const [activeProviderIndex, setActiveProviderIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [failedProviders, setFailedProviders] = useState<number[]>([]);
-  const [autoSwitchCount, setAutoSwitchCount] = useState(0);
   const [allFailed, setAllFailed] = useState(false);
+  const [failedIndexes, setFailedIndexes] = useState<number[]>([]);
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeProvider = providerPool[activeProviderIndex];
+  const activeProvider = providers[activeIndex];
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const clearTimeoutRef = () => {
+  const clearLoadTimer = () => {
     if (!timeoutRef.current) return;
     clearTimeout(timeoutRef.current);
     timeoutRef.current = null;
   };
 
-  const handleSourceFallback = useCallback((reason: string) => {
-    // Used for analytics/debug hooks if needed in the future.
-    void reason;
-    setFailedProviders((prev) => {
-      const nextFailed = prev.includes(activeProviderIndex) ? prev : [...prev, activeProviderIndex];
-      const nextIndex = providerPool.findIndex((_, idx) => idx > activeProviderIndex && !nextFailed.includes(idx));
+  const handleSourceFallback = useCallback(
+    (reason: string) => {
+      void reason;
 
-      if (nextIndex === -1) {
-        setLoading(false);
-        setAllFailed(true);
+      setFailedIndexes((prev) => {
+        const nextFailed = prev.includes(activeIndex) ? prev : [...prev, activeIndex];
+        const next = providers.findIndex((_, idx) => idx > activeIndex && !nextFailed.includes(idx));
+
+        if (next === -1) {
+          setAllFailed(true);
+          setLoading(false);
+          return nextFailed;
+        }
+
+        setActiveIndex(next);
+        setLoading(true);
         return nextFailed;
-      }
-
-      setActiveProviderIndex(nextIndex);
-      setLoading(true);
-      setAutoSwitchCount((count) => count + 1);
-      return nextFailed;
-    });
-  }, [activeProviderIndex, providerPool]);
-
-  const setProviderManually = (index: number) => {
-    if (index < 0 || index >= providerPool.length) return;
-    setActiveProviderIndex(index);
-    setLoading(true);
-    setAllFailed(false);
-  };
-
-  useEffect(() => {
-    if (!mounted || allFailed) return;
-
-    setLoading(true);
-    clearTimeoutRef();
-    timeoutRef.current = setTimeout(() => {
-      handleSourceFallback('timeout');
-    }, LOAD_TIMEOUT_MS);
-
-    return clearTimeoutRef;
-  }, [activeProviderIndex, mounted, allFailed, handleSourceFallback]);
+      });
+    },
+    [activeIndex, providers],
+  );
 
   useEffect(() => {
     if (!mounted || allFailed || !activeProvider) return;
 
-    const providerOrigin = (() => {
-      try {
-        return new URL(activeProvider.url).origin;
-      } catch {
-        return '';
-      }
-    })();
+    clearLoadTimer();
+    setLoading(true);
+
+    timeoutRef.current = setTimeout(() => {
+      handleSourceFallback('timeout');
+    }, LOAD_TIMEOUT_MS);
+
+    return clearLoadTimer;
+  }, [mounted, allFailed, activeProvider, handleSourceFallback]);
+
+  useEffect(() => {
+    if (!mounted || allFailed || !activeProvider) return;
+
+    let providerOrigin = '';
+    try {
+      providerOrigin = new URL(activeProvider.embedUrl).origin;
+    } catch {
+      providerOrigin = '';
+    }
 
     const onMessage = (event: MessageEvent) => {
       if (providerOrigin && event.origin !== providerOrigin) return;
 
       const payload = typeof event.data === 'string' ? event.data.toLowerCase() : '';
+      if (payload.includes('blocked') || payload.includes('forbidden') || payload.includes('error')) {
+        handleSourceFallback('postmessage-error');
+        return;
+      }
+
       if (payload.includes('ready') || payload.includes('player:ready') || payload.includes('playback-ready')) {
-        clearTimeoutRef();
+        clearLoadTimer();
         setLoading(false);
       }
     };
 
-    const onGlobalError = () => {
-      handleSourceFallback('window-error');
-    };
-
-    const onUnhandledRejection = () => {
-      handleSourceFallback('unhandled-rejection');
-    };
-
     window.addEventListener('message', onMessage);
-    window.addEventListener('error', onGlobalError);
-    window.addEventListener('unhandledrejection', onUnhandledRejection);
-
-    return () => {
-      window.removeEventListener('message', onMessage);
-      window.removeEventListener('error', onGlobalError);
-      window.removeEventListener('unhandledrejection', onUnhandledRejection);
-    };
-  }, [activeProvider, mounted, allFailed, handleSourceFallback]);
+    return () => window.removeEventListener('message', onMessage);
+  }, [mounted, allFailed, activeProvider, handleSourceFallback]);
 
   const onIframeLoad = () => {
-    // Fallback for providers that do not emit postMessage ready signals.
-    clearTimeoutRef();
+    clearLoadTimer();
     setLoading(false);
   };
 
@@ -148,66 +186,76 @@ export default function AnimePlayer({ shikimoriId, title }: AnimePlayerProps) {
     handleSourceFallback('iframe-error');
   };
 
-  const retryFromStart = () => {
-    setFailedProviders([]);
-    setAutoSwitchCount(0);
+  const onSwitchSource = (index: number) => {
+    if (index < 0 || index >= providers.length) return;
+    setActiveIndex(index);
     setAllFailed(false);
-    setActiveProviderIndex(0);
+    setLoading(true);
+  };
+
+  const retryAll = () => {
+    setFailedIndexes([]);
+    setAllFailed(false);
+    setActiveIndex(0);
     setLoading(true);
   };
 
   const reportIssueHref = `mailto:support@example.com?subject=${encodeURIComponent(
-    `Anime player issue: ${title}`,
-  )}&body=${encodeURIComponent(`Anime ID: ${shikimoriId}\nCurrent provider: ${activeProvider?.label ?? 'unknown'}`)}`;
+    `Video unavailable: ${title}`,
+  )}&body=${encodeURIComponent(`Anime: ${title}\nID: ${shikimoriId}\nProvider: ${activeProvider?.label ?? 'N/A'}`)}`;
 
   if (!mounted) {
-    return (
-      <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
-        <div className="aspect-video animate-pulse rounded-xl bg-zinc-800" />
-      </div>
-    );
+    return <div className="aspect-video w-full animate-pulse rounded-2xl bg-black/40 backdrop-blur-xl" />;
   }
 
   return (
-    <div className="w-full space-y-3 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3 shadow-xl">
-      <div className="flex flex-wrap gap-2">
-        {providerPool.map((provider, index) => {
-          const isActive = activeProviderIndex === index;
-          const isFailed = failedProviders.includes(index);
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-black/60 p-4 backdrop-blur-xl">
+      <div className="relative flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-zinc-900/70 p-2">
+        {providers.map((provider, index) => {
+          const isActive = activeIndex === index;
+          const isFailed = failedIndexes.includes(index);
 
           return (
-            <button
-              key={`${provider.label}-${index}`}
+            <motion.button
+              key={provider.label}
               type="button"
-              onClick={() => setProviderManually(index)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                isActive
-                  ? 'bg-orange-500 text-white'
-                  : 'border border-zinc-700 bg-zinc-950 text-zinc-300 hover:border-orange-500 hover:text-orange-400'
+              onClick={() => onSwitchSource(index)}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              className={`relative overflow-hidden rounded-xl px-3 py-2 text-xs font-medium transition ${
+                isActive ? 'text-white' : 'text-zinc-300 hover:text-white'
               } ${isFailed ? 'opacity-60' : ''}`}
             >
-              {provider.label}
-            </button>
+              {isActive && (
+                <motion.span
+                  layoutId="active-provider-pill"
+                  className="absolute inset-0 rounded-xl bg-orange-500"
+                  transition={{ type: 'spring', stiffness: 350, damping: 26 }}
+                />
+              )}
+              <span className="relative z-10">{provider.label}</span>
+            </motion.button>
           );
         })}
       </div>
 
-      <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
+      <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black/70">
         {loading && !allFailed && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-900/80">
-            <div className="flex flex-col items-center gap-3">
-              <div className="h-10 w-10 animate-spin rounded-full border-2 border-zinc-600 border-t-orange-500" />
-              <div className="h-2 w-40 animate-pulse rounded bg-zinc-700" />
-              <p className="text-xs text-zinc-400">Підключення до джерела…</p>
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/65 backdrop-blur-sm">
+            <div className="w-48 space-y-3">
+              <div className="h-2 w-full animate-pulse rounded-full bg-zinc-700" />
+              <div className="h-2 w-5/6 animate-pulse rounded-full bg-zinc-700/80" />
+              <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-zinc-500 border-t-orange-500" />
+              <p className="text-center text-xs text-zinc-300">Підключаємо найкраще джерело...</p>
             </div>
           </div>
         )}
 
         {!allFailed && activeProvider ? (
           <iframe
-            key={activeProvider.url}
-            src={activeProvider.url}
-            title={`Плеєр для ${title}`}
+            key={activeProvider.embedUrl}
+            src={activeProvider.embedUrl}
+            title={`Anime player: ${title}`}
             allow="autoplay; fullscreen"
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-presentation"
             allowFullScreen
@@ -220,19 +268,19 @@ export default function AnimePlayer({ shikimoriId, title }: AnimePlayerProps) {
         ) : (
           <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
             <div className="space-y-3">
-              <h3 className="text-base font-semibold text-zinc-100">Контент тимчасово недоступний</h3>
-              <p className="text-sm text-zinc-400">Ми перевірили всі джерела, але відтворення зараз недоступне.</p>
-              <div className="flex items-center justify-center gap-2">
+              <h3 className="text-lg font-semibold text-white">Content Unavailable</h3>
+              <p className="text-sm text-zinc-300">Не вдалося підключити жодне джерело. Спробуй ще раз або повідом про проблему.</p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
                 <button
                   type="button"
-                  onClick={retryFromStart}
-                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 hover:border-orange-500 hover:text-orange-400"
+                  onClick={retryAll}
+                  className="rounded-xl border border-white/15 bg-zinc-800/80 px-4 py-2 text-xs font-medium text-zinc-100 hover:border-orange-400"
                 >
-                  Спробувати знову
+                  Retry
                 </button>
                 <a
                   href={reportIssueHref}
-                  className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-medium text-white hover:bg-orange-400"
+                  className="rounded-xl bg-orange-500 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-400"
                 >
                   Report Issue
                 </a>
@@ -242,13 +290,23 @@ export default function AnimePlayer({ shikimoriId, title }: AnimePlayerProps) {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-        <span>
-          Активне джерело: <span className="text-zinc-200">{activeProvider?.label ?? '—'}</span>
-        </span>
-        {autoSwitchCount > 0 && (
-          <span className="rounded bg-zinc-800 px-2 py-1 text-[11px] text-orange-300">автоперемикання: {autoSwitchCount}</span>
-        )}
+      <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-3 backdrop-blur-lg">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">Download (Torrent)</p>
+        <div className="flex flex-wrap gap-2">
+          {providers
+            .filter((provider) => provider.torrentUrl)
+            .map((provider) => (
+              <a
+                key={`torrent-${provider.label}`}
+                href={provider.torrentUrl ?? '#'}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-zinc-200 hover:border-orange-400 hover:text-white"
+              >
+                .torrent via {provider.label}
+              </a>
+            ))}
+        </div>
       </div>
     </div>
   );

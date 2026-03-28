@@ -32,24 +32,30 @@ export default async function WatchPage({ params }: WatchPageProps) {
   };
 
   return (
-    <section className="space-y-4">
+    <section className="relative isolate space-y-4 overflow-hidden rounded-2xl">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(videoSchema) }} />
 
-      <Link
-        href="/"
-        className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-200 transition hover:border-orange-500 hover:text-orange-400"
-      >
-        ← Назад до каталогу
-      </Link>
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 bg-cover bg-center bg-no-repeat blur-xl"
+        style={{ backgroundImage: `url(${anime.posterUrl})`, transform: 'scale(1.15)' }}
+      />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-black/85 via-black/75 to-zinc-950" />
 
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold text-zinc-100">{anime.title}</h1>
-        <p className="text-sm text-zinc-400">{anime.subtitle}</p>
-      </header>
+      <div className="rounded-2xl border border-white/10 bg-black/60 p-4 backdrop-blur-xl">
+        <Link
+          href="/"
+          className="inline-flex rounded-xl border border-white/15 bg-zinc-900/60 px-4 py-2 text-sm text-zinc-200 transition hover:border-orange-500 hover:text-orange-300"
+        >
+          ← Назад до каталогу
+        </Link>
+
+        <header className="mt-4 space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-100 md:text-3xl">{anime.title}</h1>
+          <p className="text-sm text-zinc-300">{anime.subtitle}</p>
+        </header>
+      </div>
 
       <AnimePlayer shikimoriId={anime.id} title={anime.title} />
-
-      <p className="text-xs text-zinc-500">Плеєр автоматично переключає джерело через 7 секунд, якщо поточне не відповідає.</p>
     </section>
   );
 }
