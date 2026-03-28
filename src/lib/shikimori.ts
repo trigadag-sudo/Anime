@@ -2,10 +2,10 @@ const SHIKIMORI_API = 'https://shikimori.one/api';
 const SHIKIMORI_CDN = 'https://shikimori.one';
 
 export interface ShikimoriImage {
-  original: string;
-  preview: string;
-  x96: string;
-  x48: string;
+  original?: string;
+  preview?: string;
+  x96?: string;
+  x48?: string;
 }
 
 export interface ShikimoriAnime {
@@ -13,13 +13,8 @@ export interface ShikimoriAnime {
   name: string;
   russian: string | null;
   score: string;
-  status: string;
-  kind: string;
-  episodes: number;
   episodes_aired: number;
-  aired_on: string | null;
   image: ShikimoriImage;
-  url: string;
 }
 
 export interface AnimeCardData {
@@ -31,24 +26,31 @@ export interface AnimeCardData {
   episodesAired: number;
 }
 
-const withCdn = (path: string) => `${SHIKIMORI_CDN}${path}`;
+const FALLBACK_POSTER = 'https://shikimori.one/assets/globals/missing_original.jpg';
 
-const normalizeAnime = (anime: ShikimoriAnime): AnimeCardData => ({
-  id: anime.id,
-  title: anime.russian || anime.name,
-  subtitle: anime.name,
-  score: Number(anime.score || 0),
-  posterUrl: withCdn(anime.image.original || anime.image.preview),
-  episodesAired: anime.episodes_aired,
-});
+function withCdn(path?: string): string {
+  if (!path) return FALLBACK_POSTER;
+  return path.startsWith('http') ? path : `${SHIKIMORI_CDN}${path}`;
+}
+
+function normalizeAnime(anime: ShikimoriAnime): AnimeCardData {
+  return {
+    id: anime.id,
+    title: anime.russian || anime.name,
+    subtitle: anime.name,
+    score: Number(anime.score || 0),
+    posterUrl: withCdn(anime.image?.original || anime.image?.preview),
+    episodesAired: anime.episodes_aired || 0,
+  };
+}
 
 async function requestShikimori<T>(path: string): Promise<T> {
   const response = await fetch(`${SHIKIMORI_API}${path}`, {
     headers: {
       Accept: 'application/json',
-      'User-Agent': 'AnimeHub-UA/1.0 (+https://vercel.app)',
+      'User-Agent': 'AnimeHub-UA/1.0',
     },
-    next: { revalidate: 60 * 10 },
+    next: { revalidate: 300 },
   });
 
   if (!response.ok) {
@@ -58,11 +60,12 @@ async function requestShikimori<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function getTopOngoingAnime(limit = 20): Promise<AnimeCardData[]> {
+export async function getTopOngoingAnime(limit = 20, page = 1): Promise<AnimeCardData[]> {
   try {
     const params = new URLSearchParams({
       order: 'popularity',
       status: 'ongoing',
+      page: String(page),
       limit: String(limit),
     });
 
@@ -73,12 +76,13 @@ export async function getTopOngoingAnime(limit = 20): Promise<AnimeCardData[]> {
   }
 }
 
-export async function searchAnime(query: string, limit = 20): Promise<AnimeCardData[]> {
+export async function searchAnime(query: string, limit = 20, page = 1): Promise<AnimeCardData[]> {
   try {
     const params = new URLSearchParams({
       search: query,
-      limit: String(limit),
       order: 'popularity',
+      page: String(page),
+      limit: String(limit),
     });
 
     const data = await requestShikimori<ShikimoriAnime[]>(`/animes?${params.toString()}`);
@@ -91,11 +95,7 @@ export async function searchAnime(query: string, limit = 20): Promise<AnimeCardD
 export async function getAnimeById(id: string): Promise<AnimeCardData | null> {
   try {
     const anime = await requestShikimori<ShikimoriAnime>(`/animes/${id}`);
-
-    if (!anime?.id) {
-      return null;
-    }
-
+    if (!anime?.id) return null;
     return normalizeAnime(anime);
   } catch {
     return null;

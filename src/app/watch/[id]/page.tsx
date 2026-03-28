@@ -32,7 +32,7 @@ export default async function WatchPage({ params }: WatchPageProps) {
 
       <AnimePlayer shikimoriId={anime.id} title={anime.title} />
 
-      <p className="text-xs text-zinc-500">Плеєр намагається автоматично запускати українську озвучку.</p>
+      <p className="text-xs text-zinc-500">Плеєр автоматично пробує резервні джерела, якщо перше не відповідає.</p>
     </section>
   );
 }
