@@ -12,20 +12,64 @@ interface Provider {
   url: string;
 }
 
+const DEFAULT_PROVIDERS: Provider[] = [
+  {
+    label: 'Ashdi UA (авто)',
+    url: 'https://ashdi.vip/embed/{id}?voice=uk&lang=uk&translation=uk',
+  },
+  {
+    label: 'Ashdi Default',
+    url: 'https://ashdi.vip/embed/{id}',
+  },
+  {
+    label: 'Ashdi Mirror',
+    url: 'https://ashdi.me/embed/{id}?voice=uk&lang=uk',
+  },
+];
+
+const EXTERNAL_SOURCES = [
+  {
+    label: 'YouTube (пошук UA)',
+    href: (title: string) =>
+      `https://www.youtube.com/results?search_query=${encodeURIComponent(`${title} українською`)}`,
+  },
+  {
+    label: 'Shikimori сторінка',
+    href: (_title: string, id: number) => `https://shikimori.one/animes/${id}`,
+  },
+];
+
+const parseProviderEnv = (raw: string | undefined): Provider[] => {
+  if (!raw) {
+    return [];
+  }
+
+  return raw
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const [label, url] = item.split('|').map((part) => part?.trim());
+
+      if (!label || !url || !url.includes('{id}')) {
+        return null;
+      }
+
+      return { label, url };
+    })
+    .filter((item): item is Provider => Boolean(item));
+};
+
 export default function AnimePlayer({ shikimoriId, title }: AnimePlayerProps) {
-  const providers = useMemo<Provider[]>(
-    () => [
-      {
-        label: 'Ashdi UA (авто)',
-        url: `https://ashdi.vip/embed/${shikimoriId}?voice=uk&lang=uk&translation=uk`,
-      },
-      {
-        label: 'Ashdi Default',
-        url: `https://ashdi.vip/embed/${shikimoriId}`,
-      },
-    ],
-    [shikimoriId],
-  );
+  const providers = useMemo<Provider[]>(() => {
+    const envProviders = parseProviderEnv(process.env.NEXT_PUBLIC_EMBED_PROVIDERS);
+    const sourceProviders = envProviders.length > 0 ? envProviders : DEFAULT_PROVIDERS;
+
+    return sourceProviders.map((provider) => ({
+      ...provider,
+      url: provider.url.replace('{id}', String(shikimoriId)),
+    }));
+  }, [shikimoriId]);
 
   const [activeProvider, setActiveProvider] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,9 +118,26 @@ export default function AnimePlayer({ shikimoriId, title }: AnimePlayerProps) {
         />
       </div>
 
-      <p className="text-xs text-zinc-400">
-        За замовчуванням активовано UA-профіль. Якщо джерело недоступне — перемкни плеєр кнопками вище.
-      </p>
+      <div className="space-y-2">
+        <p className="text-xs text-zinc-400">
+          Підтримуються декілька джерел. За потреби ти можеш передати власні провайдери через
+          `NEXT_PUBLIC_EMBED_PROVIDERS` у форматі `Назва|https://site/embed/{id}`.
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          {EXTERNAL_SOURCES.map((source) => (
+            <a
+              key={source.label}
+              href={source.href(title, shikimoriId)}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-orange-500 hover:text-orange-400"
+            >
+              {source.label}
+            </a>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

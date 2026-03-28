@@ -29,6 +29,18 @@ git push -u origin work
 This repository now includes GitHub Actions workflow `.github/workflows/ci.yml`.
 It automatically runs `npm ci`, `npm run lint`, and `npm run build` for every push to `work`/`main` and for pull requests.
 
+
+### Optional: custom/open player sources
+
+You can override default player providers from `.env.local`:
+
+```bash
+NEXT_PUBLIC_EMBED_PROVIDERS="Ashdi UA|https://ashdi.vip/embed/{id}?voice=uk&lang=uk,Mirror|https://ashdi.me/embed/{id}?voice=uk&lang=uk"
+```
+
+Format: `Label|URL` and separate providers with commas.
+The URL must include `{id}` placeholder (Shikimori anime id).
+
 ## Deploy to Vercel
 
 ### Option A (recommended): Git integration
