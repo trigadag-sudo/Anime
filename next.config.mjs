@@ -6,6 +6,10 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'shikimori.one',
       },
+      {
+        protocol: 'https',
+        hostname: 'ashdi.vip',
+      },
     ],
   },
 };
