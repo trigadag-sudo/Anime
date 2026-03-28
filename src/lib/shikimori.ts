@@ -58,12 +58,13 @@ async function requestShikimori<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function getTopOngoingAnime(limit = 20): Promise<AnimeCardData[]> {
+export async function getTopOngoingAnime(limit = 20, page = 1): Promise<AnimeCardData[]> {
   try {
     const params = new URLSearchParams({
       order: 'popularity',
       status: 'ongoing',
       limit: String(limit),
+      page: String(page),
     });
 
     const data = await requestShikimori<ShikimoriAnime[]>(`/animes?${params.toString()}`);
@@ -73,12 +74,13 @@ export async function getTopOngoingAnime(limit = 20): Promise<AnimeCardData[]> {
   }
 }
 
-export async function searchAnime(query: string, limit = 20): Promise<AnimeCardData[]> {
+export async function searchAnime(query: string, limit = 20, page = 1): Promise<AnimeCardData[]> {
   try {
     const params = new URLSearchParams({
       search: query,
       limit: String(limit),
       order: 'popularity',
+      page: String(page),
     });
 
     const data = await requestShikimori<ShikimoriAnime[]>(`/animes?${params.toString()}`);

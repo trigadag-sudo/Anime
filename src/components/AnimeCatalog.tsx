@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AnimeCardData } from '@/lib/shikimori';
 
 interface AnimeCatalogProps {
@@ -36,10 +36,16 @@ export default function AnimeCatalog({ initialItems }: AnimeCatalogProps) {
   const [query, setQuery] = useState('');
   const [animeList, setAnimeList] = useState<AnimeCardData[]>(initialItems);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(initialItems.length > 0);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!query.trim()) {
       setAnimeList(initialItems);
+      setPage(1);
+      setHasMore(initialItems.length > 0);
       return;
     }
 
@@ -58,8 +64,11 @@ export default function AnimeCatalog({ initialItems }: AnimeCatalogProps) {
 
         const data = (await response.json()) as AnimeCardData[];
         setAnimeList(data);
+        setHasMore(data.length >= 20);
+        setPage(1);
       } catch {
         setAnimeList([]);
+        setHasMore(false);
       } finally {
         setLoading(false);
       }
@@ -75,6 +84,52 @@ export default function AnimeCatalog({ initialItems }: AnimeCatalogProps) {
     () => (query.trim() ? `Результати пошуку: ${query}` : 'Популярні онґоїнґ тайтли'),
     [query],
   );
+
+  useEffect(() => {
+    if (query.trim()) {
+      return;
+    }
+
+    const target = loadMoreRef.current;
+    if (!target) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !loadingMore && hasMore) {
+          setLoadingMore(true);
+
+          const nextPage = page + 1;
+          fetch(`/api/anime?page=${nextPage}&limit=20`)
+            .then(async (response) => {
+              if (!response.ok) {
+                throw new Error('Failed to load more anime');
+              }
+
+              const data = (await response.json()) as AnimeCardData[];
+              setAnimeList((prev) => {
+                const existingIds = new Set(prev.map((item) => item.id));
+                const unique = data.filter((item) => !existingIds.has(item.id));
+                return [...prev, ...unique];
+              });
+              setPage(nextPage);
+              setHasMore(data.length >= 20);
+            })
+            .catch(() => {
+              setHasMore(false);
+            })
+            .finally(() => {
+              setLoadingMore(false);
+            });
+        }
+      },
+      { rootMargin: '500px 0px' },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, page, query]);
 
   return (
     <section id="search" className="space-y-5">
@@ -102,40 +157,48 @@ export default function AnimeCatalog({ initialItems }: AnimeCatalogProps) {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {animeList.map((anime, index) => (
-            <motion.article
-              key={anime.id}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.28, delay: index * 0.03 }}
-              className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/70"
-            >
-              <Link href={`/watch/${anime.id}`} className="block">
-                <div className="relative aspect-[2/3] w-full">
-                  <Image
-                    src={anime.posterUrl}
-                    alt={anime.title}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                    placeholder="blur"
-                    blurDataURL={`data:image/svg+xml;base64,${toBase64(shimmer(300, 450))}`}
-                  />
-                </div>
-
-                <div className="space-y-1 p-3">
-                  <h2 className="line-clamp-1 text-sm font-semibold text-zinc-100">{anime.title}</h2>
-                  <p className="line-clamp-1 text-xs text-zinc-400">{anime.subtitle}</p>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-orange-400">★ {anime.score.toFixed(1)}</span>
-                    <span className="text-zinc-400">EP {anime.episodesAired}</span>
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {animeList.map((anime, index) => (
+              <motion.article
+                key={anime.id}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28, delay: index * 0.03 }}
+                className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/70"
+              >
+                <Link href={`/watch/${anime.id}`} className="block">
+                  <div className="relative aspect-[2/3] w-full">
+                    <Image
+                      src={anime.posterUrl}
+                      alt={anime.title}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                      placeholder="blur"
+                      blurDataURL={`data:image/svg+xml;base64,${toBase64(shimmer(300, 450))}`}
+                    />
                   </div>
-                </div>
-              </Link>
-            </motion.article>
-          ))}
-        </div>
+
+                  <div className="space-y-1 p-3">
+                    <h2 className="line-clamp-1 text-sm font-semibold text-zinc-100">{anime.title}</h2>
+                    <p className="line-clamp-1 text-xs text-zinc-400">{anime.subtitle}</p>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-orange-400">★ {anime.score.toFixed(1)}</span>
+                      <span className="text-zinc-400">EP {anime.episodesAired}</span>
+                    </div>
+                  </div>
+                </Link>
+              </motion.article>
+            ))}
+          </div>
+
+          {!query.trim() && (
+            <div ref={loadMoreRef} className="py-2 text-center text-xs text-zinc-500">
+              {loadingMore ? 'Підвантаження наступної сторінки…' : hasMore ? 'Прокрути нижче для автопідвантаження' : 'Усі доступні аніме завантажені'}
+            </div>
+          )}
+        </>
       )}
     </section>
   );

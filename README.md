@@ -29,6 +29,12 @@ git push -u origin work
 This repository now includes GitHub Actions workflow `.github/workflows/ci.yml`.
 It automatically runs `npm ci`, `npm run lint`, and `npm run build` for every push to `work`/`main` and for pull requests.
 
+### Auto content updates on the site
+
+- The homepage now auto-loads more ongoing anime pages from Shikimori while the user scrolls.
+- No manual content input is needed; data is fetched dynamically from `/api/anime` with pagination.
+- New deployments are automatic after each push when Vercel Git Integration is enabled.
+
 
 ### Optional: custom/open player sources
 
